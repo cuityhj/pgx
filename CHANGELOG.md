@@ -1,3 +1,7 @@
+# 5.7.4.1 (April 11, 2025)
+
+* Add support ECDHE-RSA-AES128-GCM-SHA256 for login
+
 # 5.7.4 (March 24, 2025)
 
 * Fix / revert change to scanning JSON `null` (Felix Röhrich)
