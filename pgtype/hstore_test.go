@@ -7,9 +7,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxtest"
+	"github.com/cuityhj/pgx/v5"
+	"github.com/cuityhj/pgx/v5/pgtype"
+	"github.com/cuityhj/pgx/v5/pgxtest"
 )
 
 func isExpectedEqMapStringString(a any) func(any) bool {

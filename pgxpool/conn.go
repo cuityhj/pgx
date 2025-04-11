@@ -4,8 +4,8 @@ import (
 	"context"
 	"sync/atomic"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/cuityhj/pgx/v5"
+	"github.com/cuityhj/pgx/v5/pgconn"
 	"github.com/jackc/puddle/v2"
 )
 

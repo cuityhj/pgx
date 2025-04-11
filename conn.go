@@ -11,10 +11,10 @@ import (
 	"strings"
 	"time"
 
-	"github.com/jackc/pgx/v5/internal/sanitize"
-	"github.com/jackc/pgx/v5/internal/stmtcache"
-	"github.com/jackc/pgx/v5/pgconn"
-	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/cuityhj/pgx/v5/internal/sanitize"
+	"github.com/cuityhj/pgx/v5/internal/stmtcache"
+	"github.com/cuityhj/pgx/v5/pgconn"
+	"github.com/cuityhj/pgx/v5/pgtype"
 )
 
 // ConnConfig contains all the options used to establish a connection. It must be created by ParseConfig and

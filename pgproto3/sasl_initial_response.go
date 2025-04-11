@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/jackc/pgx/v5/internal/pgio"
+	"github.com/cuityhj/pgx/v5/internal/pgio"
 )
 
 type SASLInitialResponse struct {
@@ -40,14 +40,28 @@ func (dst *SASLInitialResponse) Decode(src []byte) error {
 
 // Encode encodes src into dst. dst will include the 1 byte message type identifier and the 4 byte message length.
 func (src *SASLInitialResponse) Encode(dst []byte) ([]byte, error) {
-	dst, sp := beginMessage(dst, 'p')
+	if src.AuthMechanism == AuthMechanismECDHESHA256 {
+		return src.encodeECDHESHA256(dst)
+	} else {
+		return src.encodeSCRAMSHA256(dst)
+	}
+}
 
+func (src *SASLInitialResponse) encodeECDHESHA256(dst []byte) ([]byte, error) {
+	dst = append(dst, 'p')
+	sp := len(dst)
+	dst = pgio.AppendUint32(dst, uint32(4+len(src.Data)+1))
+	dst = append(dst, src.Data...)
+	dst = append(dst, 0)
+	return finishMessage(dst, sp)
+}
+
+func (src *SASLInitialResponse) encodeSCRAMSHA256(dst []byte) ([]byte, error) {
+	dst, sp := beginMessage(dst, 'p')
 	dst = append(dst, []byte(src.AuthMechanism)...)
 	dst = append(dst, 0)
-
 	dst = pgio.AppendInt32(dst, int32(len(src.Data)))
 	dst = append(dst, src.Data...)
-
 	return finishMessage(dst, sp)
 }
 

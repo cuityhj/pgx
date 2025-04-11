@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/jackc/pgx/v5"
-	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/cuityhj/pgx/v5"
+	"github.com/cuityhj/pgx/v5/pgconn"
 	"github.com/jackc/puddle/v2"
 )
 

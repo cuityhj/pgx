@@ -6,7 +6,12 @@ import (
 	"encoding/json"
 	"errors"
 
-	"github.com/jackc/pgx/v5/internal/pgio"
+	"github.com/cuityhj/pgx/v5/internal/pgio"
+)
+
+const (
+	AuthMechanismSCRAMSHA256 = "SCRAM-SHA-256"
+	AuthMechanismECDHESHA256 = "ECDHE-RSA-AES128-GCM-SHA256"
 )
 
 // AuthenticationSASL is a message sent from the backend indicating that SASL authentication is required.
@@ -37,13 +42,30 @@ func (dst *AuthenticationSASL) Decode(src []byte) error {
 	for len(authMechanisms) > 1 {
 		idx := bytes.IndexByte(authMechanisms, 0)
 		if idx == -1 {
-			return &invalidMessageFormatErr{messageType: "AuthenticationSASL", details: "unterminated string"}
+			if len(src) < 128 {
+				return &invalidMessageFormatErr{messageType: "AuthenticationSASL", details: "unterminated string"}
+			} else {
+				dst.decodeECDHESHA256(src)
+				break
+			}
 		}
+
 		dst.AuthMechanisms = append(dst.AuthMechanisms, string(authMechanisms[:idx]))
 		authMechanisms = authMechanisms[idx+1:]
 	}
 
 	return nil
+}
+
+func (dst *AuthenticationSASL) decodeECDHESHA256(src []byte) {
+	var buf bytes.Buffer
+	buf.Write(src[8:])
+	dst.AuthMechanisms = []string{
+		AuthMechanismECDHESHA256, //"ECDHE-RSA-AES128-GCM-SHA256"
+		string(buf.Next(64)),     //random64code
+		string(buf.Next(8)),      //token
+		"10000",                  //serverIteration = strconv.Itoa(int(int32(binary.BigEndian.Uint32([]byte{0, 0, 39, 16}))))
+	}
 }
 
 // Encode encodes src into dst. dst will include the 1 byte message type identifier and the 4 byte message length.

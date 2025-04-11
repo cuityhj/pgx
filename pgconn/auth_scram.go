@@ -22,9 +22,10 @@ import (
 	"fmt"
 	"strconv"
 
-	"github.com/jackc/pgx/v5/pgproto3"
 	"golang.org/x/crypto/pbkdf2"
 	"golang.org/x/text/secure/precis"
+
+	"github.com/cuityhj/pgx/v5/pgproto3"
 )
 
 const clientNonceLen = 18
@@ -36,11 +37,18 @@ func (c *PgConn) scramAuth(serverAuthMechanisms []string) error {
 		return err
 	}
 
+	var saslInitialResponse *pgproto3.SASLInitialResponse
 	// Send client-first-message in a SASLInitialResponse
-	saslInitialResponse := &pgproto3.SASLInitialResponse{
-		AuthMechanism: "SCRAM-SHA-256",
-		Data:          sc.clientFirstMessage(),
+	clientFirstMessage, err := sc.clientFirstMessage(c.config.Password)
+	if err != nil {
+		return err
 	}
+
+	saslInitialResponse = &pgproto3.SASLInitialResponse{
+		AuthMechanism: sc.AuthMechanism,
+		Data:          clientFirstMessage,
+	}
+
 	c.frontend.Send(saslInitialResponse)
 	err = c.flushWithPotentialWriteReadDeadlock()
 	if err != nil {
@@ -52,6 +60,11 @@ func (c *PgConn) scramAuth(serverAuthMechanisms []string) error {
 	if err != nil {
 		return err
 	}
+
+	if sc.AuthMechanism == pgproto3.AuthMechanismECDHESHA256 && saslContinue == nil {
+		return nil
+	}
+
 	err = sc.recvServerFirstMessage(saslContinue.Data)
 	if err != nil {
 		return err
@@ -72,6 +85,7 @@ func (c *PgConn) scramAuth(serverAuthMechanisms []string) error {
 	if err != nil {
 		return err
 	}
+
 	return sc.recvServerFinalMessage(saslFinal.Data)
 }
 
@@ -85,6 +99,8 @@ func (c *PgConn) rxSASLContinue() (*pgproto3.AuthenticationSASLContinue, error) 
 		return m, nil
 	case *pgproto3.ErrorResponse:
 		return nil, ErrorResponseToPgError(m)
+	case *pgproto3.AuthenticationOk:
+		return nil, nil
 	}
 
 	return nil, fmt.Errorf("expected AuthenticationSASLContinue message but received unexpected message %T", msg)
@@ -119,6 +135,8 @@ type scramClient struct {
 
 	saltedPassword []byte
 	authMessage    []byte
+
+	AuthMechanism string
 }
 
 func newScramClient(serverAuthMechanisms []string, password string) (*scramClient, error) {
@@ -126,16 +144,21 @@ func newScramClient(serverAuthMechanisms []string, password string) (*scramClien
 		serverAuthMechanisms: serverAuthMechanisms,
 	}
 
-	// Ensure server supports SCRAM-SHA-256
-	hasScramSHA256 := false
+	// Ensure server supports SCRAM-SHA-256 and ECDHE-RSA-AES128-GCM-SHA256
 	for _, mech := range sc.serverAuthMechanisms {
-		if mech == "SCRAM-SHA-256" {
-			hasScramSHA256 = true
+		if mech == pgproto3.AuthMechanismSCRAMSHA256 {
+			sc.AuthMechanism = pgproto3.AuthMechanismSCRAMSHA256
+			break
+		}
+
+		if mech == pgproto3.AuthMechanismECDHESHA256 {
+			sc.AuthMechanism = pgproto3.AuthMechanismECDHESHA256
 			break
 		}
 	}
-	if !hasScramSHA256 {
-		return nil, errors.New("server does not support SCRAM-SHA-256")
+
+	if sc.AuthMechanism != pgproto3.AuthMechanismSCRAMSHA256 && sc.AuthMechanism != pgproto3.AuthMechanismECDHESHA256 {
+		return nil, errors.New("server does not support SCRAM-SHA-256 or ECDHE-RSA-AES128-GCM-SHA256")
 	}
 
 	// precis.OpaqueString is equivalent to SASLprep for password.
@@ -151,15 +174,31 @@ func newScramClient(serverAuthMechanisms []string, password string) (*scramClien
 	if err != nil {
 		return nil, err
 	}
+
 	sc.clientNonce = make([]byte, base64.RawStdEncoding.EncodedLen(len(buf)))
 	base64.RawStdEncoding.Encode(sc.clientNonce, buf)
 
 	return sc, nil
 }
 
-func (sc *scramClient) clientFirstMessage() []byte {
-	sc.clientFirstMessageBare = []byte(fmt.Sprintf("n=,r=%s", sc.clientNonce))
-	return []byte(fmt.Sprintf("n,,%s", sc.clientFirstMessageBare))
+func (sc *scramClient) clientFirstMessage(password string) ([]byte, error) {
+	if sc.AuthMechanism == pgproto3.AuthMechanismECDHESHA256 {
+		if len(sc.serverAuthMechanisms) != 4 {
+			return nil, errors.New("invalid auth mechanisms,login denied")
+		}
+
+		serverIteration, _ := strconv.Atoi(sc.serverAuthMechanisms[3])
+		data := RFC5802Algorithm(password, sc.serverAuthMechanisms[1],
+			sc.serverAuthMechanisms[2], "", serverIteration, "sha256")
+		if len(data) == 0 {
+			return nil, errors.New("invalid username/password,login denied")
+		}
+
+		return data, nil
+	} else {
+		sc.clientFirstMessageBare = []byte(fmt.Sprintf("n=,r=%s", sc.clientNonce))
+		return []byte(fmt.Sprintf("n,,%s", sc.clientFirstMessageBare)), nil
+	}
 }
 
 func (sc *scramClient) recvServerFirstMessage(serverFirstMessage []byte) error {

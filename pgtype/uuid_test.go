@@ -5,8 +5,8 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/jackc/pgx/v5/pgxtest"
+	"github.com/cuityhj/pgx/v5/pgtype"
+	"github.com/cuityhj/pgx/v5/pgxtest"
 	"github.com/stretchr/testify/require"
 )
 
